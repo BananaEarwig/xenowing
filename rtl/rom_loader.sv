@@ -7,7 +7,6 @@ module rom_loader(
     input [7:0] uart_receiver_data,
     input uart_receiver_data_ready,
 
-    input soft_reset,
     output system_soft_reset,
 
     output logic [13:0] program_rom_write_addr,
@@ -31,9 +30,6 @@ module rom_loader(
     logic [31:0] data_receive_index;
     logic [31:0] data_receive_index_next;
 
-    logic last_soft_reset;
-    logic last_soft_reset_next;
-
     assign system_soft_reset = state == STATE_RECEIVE_DATA;
 
     always_comb begin
@@ -48,62 +44,40 @@ module rom_loader(
 
         data_receive_index_next = data_receive_index;
 
-        last_soft_reset_next = last_soft_reset;
+        program_rom_write_req_next = 0;
 
-        last_soft_reset_next = soft_reset;
+        case (state)
+            STATE_RECEIVE_LEN: begin
+                if (uart_receiver_data_ready) begin
+                    len_next = {uart_receiver_data, len_next[31:8]};
 
-        // Reset state on soft reset high -> low transition
-        //  This is to work around some spurious UART rx signals that seem to desync the loader state on
-        //  system power-on or reset. Another way we could work around this is with a timeout, but this
-        //  seems a little easier, although a bit hacky.
-        if (!soft_reset && last_soft_reset) begin
-            program_rom_write_addr_next = 14'h0;
-            program_rom_write_data_next = 32'h0;
-            program_rom_write_req_next = 0;
-
-            state_next = STATE_RECEIVE_LEN;
-
-            len_next = 32'h0;
-            len_receive_index_next = 2'h0;
-
-            data_receive_index_next = 32'h0;
-        end
-        else begin
-            program_rom_write_req_next = 0;
-
-            case (state)
-                STATE_RECEIVE_LEN: begin
-                    if (uart_receiver_data_ready) begin
-                        len_next = {uart_receiver_data, len_next[31:8]};
-
-                        if (len_receive_index == 2'h3) begin
-                            state_next = STATE_RECEIVE_DATA;
-                            data_receive_index_next = 32'h0;
-                        end
-                        else begin
-                            len_receive_index_next = len_receive_index + 2'h1;
-                        end
+                    if (len_receive_index == 2'h3) begin
+                        state_next = STATE_RECEIVE_DATA;
+                        data_receive_index_next = 32'h0;
+                    end
+                    else begin
+                        len_receive_index_next = len_receive_index + 2'h1;
                     end
                 end
+            end
 
-                STATE_RECEIVE_DATA: begin
-                    if (uart_receiver_data_ready) begin
-                        program_rom_write_data_next = {uart_receiver_data, program_rom_write_data[31:8]};
+            STATE_RECEIVE_DATA: begin
+                if (uart_receiver_data_ready) begin
+                    program_rom_write_data_next = {uart_receiver_data, program_rom_write_data[31:8]};
 
-                        if (data_receive_index[1:0] == 2'h3) begin
-                            program_rom_write_addr_next = data_receive_index[15:2];
-                            program_rom_write_req_next = 1;
-                        end
+                    if (data_receive_index[1:0] == 2'h3) begin
+                        program_rom_write_addr_next = data_receive_index[15:2];
+                        program_rom_write_req_next = 1;
+                    end
 
-                        data_receive_index_next = data_receive_index + 32'h1;
-                        if (data_receive_index_next == len) begin
-                            state_next = STATE_RECEIVE_LEN;
-                            len_receive_index_next = 2'h0;
-                        end
+                    data_receive_index_next = data_receive_index + 32'h1;
+                    if (data_receive_index_next == len) begin
+                        state_next = STATE_RECEIVE_LEN;
+                        len_receive_index_next = 2'h0;
                     end
                 end
-            endcase
-        end
+            end
+        endcase
     end
 
     always_ff @(posedge clk) begin
@@ -118,8 +92,6 @@ module rom_loader(
             len_receive_index <= 2'h0;
 
             data_receive_index <= 32'h0;
-
-            last_soft_reset <= 0;
         end
         else begin
             program_rom_write_addr <= program_rom_write_addr_next;
@@ -132,8 +104,6 @@ module rom_loader(
             len_receive_index <= len_receive_index_next;
 
             data_receive_index <= data_receive_index_next;
-
-            last_soft_reset <= last_soft_reset_next;
         end
     end
 

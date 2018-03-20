@@ -72,9 +72,14 @@ module uart_receiver(
 
             STATE_START_BIT: begin
                 if (double_baud_clk_tick_counter == 2'h1) begin
-                    state_next = STATE_BIT;
-                    bit_receive_index_next = 3'h0;
-                    double_baud_clk_tick_counter_next = 2'h0;
+                    if (!rx_stable) begin
+                        state_next = STATE_BIT;
+                        bit_receive_index_next = 3'h0;
+                        double_baud_clk_tick_counter_next = 2'h0;
+                    end
+                    else begin
+                        state_next = STATE_IDLE;
+                    end
                 end
             end
 

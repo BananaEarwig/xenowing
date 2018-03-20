@@ -132,7 +132,6 @@ module hw_top(
         .uart_receiver_data(uart_receiver_data),
         .uart_receiver_data_ready(uart_receiver_data_ready),
 
-        .soft_reset(!ddr3_controller_local_init_done),
         .system_soft_reset(rom_loader_system_soft_reset),
 
         .program_rom_write_addr(program_rom_wraddress),
